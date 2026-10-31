@@ -48,7 +48,7 @@ Use an empty string for anything not on the card. Never invent data. Keep Turkis
         val body = JSONObject()
             .put("contents", JSONArray().put(JSONObject().put("parts", parts)))
             .put("generationConfig", JSONObject()
-                .put("responseMimeType", "application/json").put("temperature", 0))
+                .put("responseMimeType", "application/json"))
 
         val url = URL("https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent")
         val c = url.openConnection() as HttpURLConnection

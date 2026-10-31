@@ -63,12 +63,12 @@ class VM(app: Application) : AndroidViewModel(app) {
     var busy by mutableStateOf(false)
     var message by mutableStateOf<String?>(null)
     var apiKey by mutableStateOf(prefs.getString("key", "") ?: "")
-    var model by mutableStateOf(prefs.getString("model", "gemini-2.5-flash") ?: "gemini-2.5-flash")
+    var model by mutableStateOf(prefs.getString("model_v2", "gemini-3.5-flash") ?: "gemini-3.5-flash")
 
     fun saveSettings(k: String, m: String) {
         apiKey = k.trim()
-        model = m.trim().ifEmpty { "gemini-2.5-flash" }
-        prefs.edit().putString("key", apiKey).putString("model", model).apply()
+        model = m.trim().ifEmpty { "gemini-3.5-flash" }
+        prefs.edit().putString("key", apiKey).putString("model_v2", model).apply()
         screen = Screen.Home
         message = "Ayarlar kaydedildi"
     }
