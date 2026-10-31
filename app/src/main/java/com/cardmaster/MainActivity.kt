@@ -61,6 +61,7 @@ class VM(app: Application) : AndroidViewModel(app) {
     var query by mutableStateOf("")
     var screen: Screen by mutableStateOf(Screen.Home)
     var busy by mutableStateOf(false)
+    var errorText by mutableStateOf<String?>(null)
     var message by mutableStateOf<String?>(null)
     var apiKey by mutableStateOf(prefs.getString("key", "") ?: "")
     var model by mutableStateOf(prefs.getString("model_v2", "gemini-3.5-flash") ?: "gemini-3.5-flash")
@@ -96,7 +97,7 @@ class VM(app: Application) : AndroidViewModel(app) {
                     ), isNew = true, fromScan = true
                 )
             } catch (e: Exception) {
-                message = "OCR hatası: ${e.message}"
+                errorText = "OCR hatası: ${e.message}"
             } finally {
                 busy = false
             }
@@ -150,6 +151,14 @@ fun App(vm: VM = viewModel()) {
     val ctx = LocalContext.current
     LaunchedEffect(vm.message) {
         vm.message?.let { Toast.makeText(ctx, it, Toast.LENGTH_LONG).show(); vm.message = null }
+    }
+    vm.errorText?.let { t ->
+        AlertDialog(
+            onDismissRequest = { vm.errorText = null },
+            title = { Text("Hata") },
+            text = { Text(t, fontSize = 13.sp, modifier = Modifier.verticalScroll(rememberScrollState())) },
+            confirmButton = { TextButton(onClick = { vm.errorText = null }) { Text("Tamam") } }
+        )
     }
     Box(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding()) {
         when (val s = vm.screen) {

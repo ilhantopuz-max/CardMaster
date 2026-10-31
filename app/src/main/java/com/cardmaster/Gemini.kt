@@ -63,7 +63,13 @@ Use an empty string for anything not on the card. Never invent data. Keep Turkis
         val code = c.responseCode
         val text = (if (code in 200..299) c.inputStream else c.errorStream)
             ?.bufferedReader()?.readText() ?: ""
-        if (code !in 200..299) throw Exception("HTTP $code: ${text.take(300)}")
+        if (code !in 200..299) {
+            val detail = try {
+                val e = JSONObject(text).getJSONObject("error")
+                e.optString("status") + ": " + e.optString("message")
+            } catch (ex: Exception) { text.take(600) }
+            throw Exception("HTTP $code (model: $model)\n$detail")
+        }
 
         val out = JSONObject(text).getJSONArray("candidates").getJSONObject(0)
             .getJSONObject("content").getJSONArray("parts").getJSONObject(0).getString("text")
