@@ -88,17 +88,13 @@ class VM(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             busy = true
             try {
-                val (ex, logo) = withContext(Dispatchers.IO) {
-                    val bmp = loadBitmap(path)
-                    val e = Gemini.scan(bmp, apiKey, model)
-                    e to cropLogo(bmp, e.logoBox, cardsDir(getApplication()))
-                }
+                val ex = withContext(Dispatchers.IO) { Gemini.scan(loadBitmap(path), apiKey, model) }
                 screen = Screen.Form(
                     BizCard(
                         name = ex.name, company = ex.company, jobTitle = ex.jobTitle,
                         mobile = ex.mobile, phone = ex.phone, email = ex.email,
                         website = ex.website, address = ex.address, city = ex.city,
-                        logoPath = logo, photoPath = path
+                        photoPath = path
                     ), isNew = true, fromScan = true
                 )
             } catch (e: Exception) {
@@ -314,21 +310,17 @@ fun HomeScreen(vm: VM) {
                 Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)
                     .clickable { vm.screen = Screen.Form(c, false, false) }) {
                     Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        if (c.logoPath.isNotBlank()) {
-                            Img(c.logoPath, Modifier.size(52.dp))
-                        } else {
-                            Surface(Modifier.size(52.dp), shape = MaterialTheme.shapes.medium,
-                                color = MaterialTheme.colorScheme.primaryContainer) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Text((c.name.ifBlank { c.company }).take(1).uppercase(),
-                                        fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                                }
+                        Surface(Modifier.size(52.dp), shape = MaterialTheme.shapes.medium,
+                            color = MaterialTheme.colorScheme.primaryContainer) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text((c.company.ifBlank { c.name }).take(1).uppercase(),
+                                    fontSize = 22.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                         Spacer(Modifier.width(12.dp))
                         Column {
-                            Text(c.name.ifBlank { c.company.ifBlank { "(isimsiz)" } }, fontWeight = FontWeight.Bold)
-                            if (c.company.isNotBlank()) Text(c.company, fontSize = 14.sp)
+                            Text(c.company.ifBlank { c.name.ifBlank { "(isimsiz)" } }, fontWeight = FontWeight.Bold)
+                            if (c.company.isNotBlank() && c.name.isNotBlank()) Text(c.name, fontSize = 14.sp)
                             Text(listOf(c.mobile, c.city).filter { it.isNotBlank() }.joinToString(" • "),
                                 fontSize = 12.sp)
                         }
@@ -392,15 +384,8 @@ fun FormScreen(vm: VM, s: Screen.Form) {
         if (c.photoPath.isNotBlank()) {
             Img(c.photoPath, Modifier.fillMaxWidth().heightIn(max = 220.dp).padding(vertical = 8.dp))
         }
-        if (c.logoPath.isNotBlank()) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Logo: ")
-                Img(c.logoPath, Modifier.size(56.dp))
-                TextButton(onClick = { c = c.copy(logoPath = "") }) { Text("Logoyu kaldır") }
-            }
-        }
-        Field("Ad Soyad", c.name, { c = c.copy(name = it) })
         Field("Firma ünvanı", c.company, { c = c.copy(company = it) })
+        Field("Yetkili kişi (Ad Soyad)", c.name, { c = c.copy(name = it) })
         Field("Görev / Pozisyon", c.jobTitle, { c = c.copy(jobTitle = it) })
         Field("GSM", c.mobile, { c = c.copy(mobile = it) }, KeyboardType.Phone)
         Field("Sabit telefon", c.phone, { c = c.copy(phone = it) }, KeyboardType.Phone)
@@ -488,7 +473,7 @@ fun SettingsScreen(vm: VM) {
 
         Spacer(Modifier.height(24.dp))
         Text("Yedekleme", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        Text("Yedek dosyası kartvizit kayıtlarını, notları, fotoğrafları ve logoları içerir. " +
+        Text("Yedek dosyası kartvizit kayıtlarını, notları ve kartvizit fotoğraflarını içerir. " +
             "Kaydederken Google Drive'ı seçersen yedek Google hesabında durur. API anahtarı yedeğe dahil edilmez.",
             fontSize = 13.sp)
         Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

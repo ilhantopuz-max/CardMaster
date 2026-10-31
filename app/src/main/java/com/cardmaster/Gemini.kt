@@ -11,8 +11,7 @@ import java.net.URL
 data class Extracted(
     val name: String, val company: String, val jobTitle: String,
     val mobile: String, val phone: String, val email: String,
-    val website: String, val address: String, val city: String,
-    val logoBox: List<Int>?
+    val website: String, val address: String, val city: String
 )
 
 object Gemini {
@@ -25,8 +24,7 @@ object Gemini {
 "email": email address,
 "website": web address,
 "address": full postal address as printed,
-"city": city (il) taken from the address, e.g. Bursa,
-"logo_box": bounding box of the company LOGO graphic only as [ymin, xmin, ymax, xmax] normalized to 0-1000, or null if there is no logo.
+"city": city (il) taken from the address, e.g. Bursa.
 Use an empty string for anything not on the card. Never invent data. Keep Turkish characters exactly. Keep phone numbers as printed."""
 
     private fun scaleDown(b: Bitmap, max: Int): Bitmap {
@@ -77,10 +75,7 @@ Use an empty string for anything not on the card. Never invent data. Keep Turkis
             .removeSuffix("```").trim())
 
         fun s(k: String) = if (j.isNull(k)) "" else j.optString(k, "").trim()
-        val box = j.optJSONArray("logo_box")?.let { a ->
-            if (a.length() == 4) List(4) { a.optInt(it) } else null
-        }
         return Extracted(s("name"), s("company"), s("job_title"), s("mobile"), s("phone"),
-            s("email"), s("website"), s("address"), s("city"), box)
+            s("email"), s("website"), s("address"), s("city"))
     }
 }
