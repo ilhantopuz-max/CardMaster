@@ -27,6 +27,9 @@ interface CardDao {
     @Query("SELECT * FROM cards ORDER BY createdAt DESC")
     fun all(): Flow<List<BizCard>>
 
+    @Query("SELECT * FROM cards")
+    suspend fun snapshot(): List<BizCard>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(c: BizCard): Long
 

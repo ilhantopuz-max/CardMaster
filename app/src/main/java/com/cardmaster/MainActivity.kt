@@ -46,6 +46,9 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 sealed interface Screen {
     data object Home : Screen
@@ -127,6 +130,41 @@ class VM(app: Application) : AndroidViewModel(app) {
                 if (ok) "Kaydedildi ve rehbere eklendi" else "Kaydedildi (rehbere yazılamadı)"
             } else "Kaydedildi"
             screen = Screen.Home
+        }
+    }
+
+    fun backup(uri: Uri) {
+        viewModelScope.launch {
+            busy = true
+            try {
+                val list = dao.snapshot()
+                withContext(Dispatchers.IO) { Backup.export(getApplication(), uri, list) }
+                message = "Yedek alındı (${list.size} kayıt)"
+            } catch (e: Exception) {
+                errorText = "Yedekleme hatası: ${e.message}"
+            } finally { busy = false }
+        }
+    }
+
+    fun restore(uri: Uri) {
+        viewModelScope.launch {
+            busy = true
+            try {
+                val incoming = withContext(Dispatchers.IO) { Backup.read(getApplication(), uri) }
+                val existing = dao.snapshot()
+                var added = 0
+                incoming.forEach { n ->
+                    val dup = existing.any {
+                        it.name == n.name && it.company == n.company &&
+                            it.mobile == n.mobile && it.email == n.email
+                    }
+                    if (!dup) { dao.upsert(n.copy(id = 0)); added++ }
+                }
+                message = "$added kayıt geri yüklendi (${incoming.size - added} tanesi zaten vardı)"
+                screen = Screen.Home
+            } catch (e: Exception) {
+                errorText = "Geri yükleme hatası: ${e.message}"
+            } finally { busy = false }
         }
     }
 
@@ -379,6 +417,12 @@ fun SettingsScreen(vm: VM) {
     BackHandler { vm.screen = Screen.Home }
     var key by remember { mutableStateOf(vm.apiKey) }
     var model by remember { mutableStateOf(vm.model) }
+    val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+        uri?.let { vm.backup(it) }
+    }
+    val opener = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let { vm.restore(it) }
+    }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
         Text("Ayarlar", fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
@@ -395,6 +439,21 @@ fun SettingsScreen(vm: VM) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { vm.saveSettings(key, model) }) { Text("Kaydet") }
             OutlinedButton(onClick = { vm.screen = Screen.Home }) { Text("Geri") }
+        }
+
+        Spacer(Modifier.height(24.dp))
+        Text("Yedekleme", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text("Yedek dosyası kartvizit kayıtlarını, notları, fotoğrafları ve logoları içerir. " +
+            "Kaydederken Google Drive'ı seçersen yedek Google hesabında durur. API anahtarı yedeğe dahil edilmez.",
+            fontSize = 13.sp)
+        Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = {
+                saver.launch("CardMaster-yedek-" +
+                    SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date()) + ".zip")
+            }) { Text("💾 Yedekle") }
+            OutlinedButton(onClick = {
+                opener.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
+            }) { Text("📥 Geri yükle") }
         }
     }
 }
