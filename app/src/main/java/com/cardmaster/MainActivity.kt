@@ -65,6 +65,8 @@ class VM(app: Application) : AndroidViewModel(app) {
     var screen: Screen by mutableStateOf(Screen.Home)
     var busy by mutableStateOf(false)
     var errorText by mutableStateOf<String?>(null)
+    var importCandidates by mutableStateOf<List<BizCard>?>(null)
+    var importSkipped by mutableStateOf(0)
     var message by mutableStateOf<String?>(null)
     var apiKey by mutableStateOf(prefs.getString("key", "") ?: "")
     var model by mutableStateOf(prefs.getString("model_v2", "gemini-3.5-flash") ?: "gemini-3.5-flash")
@@ -133,6 +135,34 @@ class VM(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun scanContacts() {
+        viewModelScope.launch {
+            busy = true
+            try {
+                val found = withContext(Dispatchers.IO) { ContactsReader.readWithCompany(getApplication()) }
+                val existing = dao.snapshot()
+                val fresh = found.filter { n -> existing.none { sameCard(it, n) } }
+                importSkipped = found.size - fresh.size
+                if (fresh.isEmpty()) {
+                    message = if (found.isEmpty()) "Rehberde firma bilgisi olan kişi bulunamadı"
+                    else "Firma bilgisi olan ${found.size} kişi bulundu, hepsi zaten kayıtlı"
+                } else importCandidates = fresh
+            } catch (e: Exception) {
+                errorText = "Rehber okuma hatası: ${e.message}"
+            } finally { busy = false }
+        }
+    }
+
+    fun confirmImport() {
+        val list = importCandidates ?: return
+        importCandidates = null
+        viewModelScope.launch {
+            list.forEach { dao.upsert(it) }
+            message = "${list.size} kayıt rehberden aktarıldı"
+            screen = Screen.Home
+        }
+    }
+
     fun backup(uri: Uri) {
         viewModelScope.launch {
             busy = true
@@ -196,6 +226,16 @@ fun App(vm: VM = viewModel()) {
             title = { Text("Hata") },
             text = { Text(t, fontSize = 13.sp, modifier = Modifier.verticalScroll(rememberScrollState())) },
             confirmButton = { TextButton(onClick = { vm.errorText = null }) { Text("Tamam") } }
+        )
+    }
+    vm.importCandidates?.let { l ->
+        val skipped = if (vm.importSkipped > 0) " (${vm.importSkipped} kişi zaten kayıtlı, atlanacak)" else ""
+        AlertDialog(
+            onDismissRequest = { vm.importCandidates = null },
+            title = { Text("Rehberden aktar") },
+            text = { Text("Firma bilgisi olan ${l.size} yeni kişi bulundu$skipped. Uygulamaya aktarılsın mı?") },
+            confirmButton = { TextButton(onClick = { vm.confirmImport() }) { Text("Aktar") } },
+            dismissButton = { TextButton(onClick = { vm.importCandidates = null }) { Text("Vazgeç") } }
         )
     }
     Box(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding()) {
@@ -287,7 +327,7 @@ fun HomeScreen(vm: VM) {
                         }
                         Spacer(Modifier.width(12.dp))
                         Column {
-                            Text(c.name.ifBlank { "(isimsiz)" }, fontWeight = FontWeight.Bold)
+                            Text(c.name.ifBlank { c.company.ifBlank { "(isimsiz)" } }, fontWeight = FontWeight.Bold)
                             if (c.company.isNotBlank()) Text(c.company, fontSize = 14.sp)
                             Text(listOf(c.mobile, c.city).filter { it.isNotBlank() }.joinToString(" • "),
                                 fontSize = 12.sp)
@@ -417,6 +457,11 @@ fun SettingsScreen(vm: VM) {
     BackHandler { vm.screen = Screen.Home }
     var key by remember { mutableStateOf(vm.apiKey) }
     var model by remember { mutableStateOf(vm.model) }
+    val ctx = LocalContext.current
+    val readPerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) vm.scanContacts()
+        else Toast.makeText(ctx, "Rehber okuma izni verilmedi", Toast.LENGTH_SHORT).show()
+    }
     val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         uri?.let { vm.backup(it) }
     }
@@ -455,5 +500,15 @@ fun SettingsScreen(vm: VM) {
                 opener.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
             }) { Text("📥 Geri yükle") }
         }
+
+        Spacer(Modifier.height(24.dp))
+        Text("Rehberden içe aktar", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text("Telefon rehberinde firma bilgisi girilmiş kişileri bu uygulamaya kopyalar. " +
+            "Rehberdeki kişilere dokunulmaz. Aktarmadan önce onayınızı ister.", fontSize = 13.sp)
+        Button(modifier = Modifier.padding(top = 8.dp), onClick = {
+            if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.READ_CONTACTS)
+                == PackageManager.PERMISSION_GRANTED) vm.scanContacts()
+            else readPerm.launch(Manifest.permission.READ_CONTACTS)
+        }) { Text("👥 Rehberden aktar") }
     }
 }
